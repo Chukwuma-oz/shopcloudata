@@ -18,8 +18,8 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-        role-to-assume: arn:aws:iam::881748974896:role/ShopCloud-GitHubActions-Role
-        aws-region: us-east-1
+         role-to-assume: arn:aws:iam::881748974896:role/ShopCloud-GitHubActions-Role
+         aws-region: us-east-1
       - uses: actions/setup-node@v4
         with:
           node-version: 22
