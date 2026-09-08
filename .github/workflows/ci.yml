@@ -1,0 +1,37 @@
+name: ShopCloud CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+        role-to-assume: arn:aws:iam::881748974896:role/ShopCloud-GitHubActions-Role
+        aws-region: us-east-1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Backend install
+        working-directory: backend
+        run: npm install
+      - name: Backend syntax
+        working-directory: backend
+        run: node --check server.js
+      - name: Frontend install
+        working-directory: frontend
+        run: npm install
+      - name: Frontend build
+        working-directory: frontend
+        run: npm run build
