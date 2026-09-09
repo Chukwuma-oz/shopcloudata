@@ -1,165 +1,235 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: ShopCloud - two AZ VPC with public and private subnets.
+Description: ShopCloud - public ALB, private EC2 Auto Scaling and CloudWatch.
 
-Resources:
-  VPC:
-    Type: AWS::EC2::VPC
-    Properties:
-      CidrBlock: 10.20.0.0/16
-      EnableDnsSupport: true
-      EnableDnsHostnames: true
-      Tags:
-        - Key: Name
-          Value: ShopCloud-VPC
-
-  IGW:
-    Type: AWS::EC2::InternetGateway
-
-  AttachIGW:
-    Type: AWS::EC2::VPCGatewayAttachment
-    Properties:
-      VpcId: !Ref VPC
-      InternetGatewayId: !Ref IGW
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
 
   PublicSubnetA:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPC
-      CidrBlock: 10.20.1.0/24
-      AvailabilityZone: !Select [0, !GetAZs '']
-      MapPublicIpOnLaunch: true
-      Tags: [{Key: Name, Value: ShopCloud-Public-A}]
+    Type: AWS::EC2::Subnet::Id
 
   PublicSubnetB:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPC
-      CidrBlock: 10.20.2.0/24
-      AvailabilityZone: !Select [1, !GetAZs '']
-      MapPublicIpOnLaunch: true
-      Tags: [{Key: Name, Value: ShopCloud-Public-B}]
+    Type: AWS::EC2::Subnet::Id
 
   AppSubnetA:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPC
-      CidrBlock: 10.20.11.0/24
-      AvailabilityZone: !Select [0, !GetAZs '']
-      Tags: [{Key: Name, Value: ShopCloud-Private-App-A}]
+    Type: AWS::EC2::Subnet::Id
 
   AppSubnetB:
-    Type: AWS::EC2::Subnet
+    Type: AWS::EC2::Subnet::Id
+
+  AmiId:
+    Type: AWS::EC2::Image::Id
+
+  EcrImageUri:
+    Type: String
+
+  DatabaseSecretArn:
+    Type: String
+
+  DatabaseEndpoint:
+    Type: String
+
+  RedisEndpoint:
+    Type: String
+
+  ALBSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+
+  AppSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+
+Resources:
+
+  InstanceRole:
+    Type: AWS::IAM::Role
     Properties:
-      VpcId: !Ref VPC
-      CidrBlock: 10.20.12.0/24
-      AvailabilityZone: !Select [1, !GetAZs '']
-      Tags: [{Key: Name, Value: ShopCloud-Private-App-B}]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
 
-  DataSubnetA:
-    Type: AWS::EC2::Subnet
+      Policies:
+        - PolicyName: ShopCloudRuntime
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: "*"
+
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                Resource: "*"
+
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref DatabaseSecretArn
+
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
     Properties:
-      VpcId: !Ref VPC
-      CidrBlock: 10.20.21.0/24
-      AvailabilityZone: !Select [0, !GetAZs '']
-      Tags: [{Key: Name, Value: ShopCloud-Private-Data-A}]
+      Roles:
+        - !Ref InstanceRole
 
-  DataSubnetB:
-    Type: AWS::EC2::Subnet
+  LogGroup:
+    Type: AWS::Logs::LogGroup
     Properties:
-      VpcId: !Ref VPC
-      CidrBlock: 10.20.22.0/24
-      AvailabilityZone: !Select [1, !GetAZs '']
-      Tags: [{Key: Name, Value: ShopCloud-Private-Data-B}]
+      LogGroupName: /shopcloud/backend
+      RetentionInDays: 14
 
-  PublicRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties: {VpcId: !Ref VPC}
-
-  PublicRoute:
-    Type: AWS::EC2::Route
-    DependsOn: AttachIGW
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
     Properties:
-      RouteTableId: !Ref PublicRouteTable
-      DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref IGW
+      LaunchTemplateData:
+        ImageId: !Ref AmiId
+        InstanceType: t3.micro
 
-  PublicAssocA:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties: {SubnetId: !Ref PublicSubnetA, RouteTableId: !Ref PublicRouteTable}
+        IamInstanceProfile:
+          Name: !Ref InstanceProfile
 
-  PublicAssocB:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties: {SubnetId: !Ref PublicSubnetB, RouteTableId: !Ref PublicRouteTable}
+        SecurityGroupIds:
+          - !Ref AppSecurityGroupId
 
-  NatEipA:
-    Type: AWS::EC2::EIP
-    Properties: {Domain: vpc}
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -eux
 
-  NatEipB:
-    Type: AWS::EC2::EIP
-    Properties: {Domain: vpc}
+            dnf install -y docker awscli
+            systemctl enable --now docker
 
-  NatA:
-    Type: AWS::EC2::NatGateway
-    DependsOn: AttachIGW
+            REGION="${AWS::Region}"
+            IMAGE="${EcrImageUri}"
+
+            ACCOUNT_REGISTRY="$(echo "$IMAGE" | cut -d/ -f1)"
+
+            aws ecr get-login-password \
+              --region "$REGION" | \
+              docker login \
+              --username AWS \
+              --password-stdin "$ACCOUNT_REGISTRY"
+
+            SECRET_JSON="$(aws secretsmanager get-secret-value \
+              --secret-id "${DatabaseSecretArn}" \
+              --region "$REGION" \
+              --query SecretString \
+              --output text)"
+
+            DB_USER="$(echo "$SECRET_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["username"])')"
+
+            DB_PASS="$(echo "$SECRET_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["password"])')"
+
+            docker pull "$IMAGE"
+
+            docker rm -f shopcloud-backend || true
+
+            docker run -d \
+              --name shopcloud-backend \
+              --restart unless-stopped \
+              -p 5000:5000 \
+              -e PORT=5000 \
+              -e DB_HOST="${DatabaseEndpoint}" \
+              -e DB_PORT=3306 \
+              -e DB_NAME=shopcloud \
+              -e DB_USER="$DB_USER" \
+              -e DB_PASSWORD="$DB_PASS" \
+              -e REDIS_HOST="${RedisEndpoint}" \
+              -e REDIS_PORT=6379 \
+              -e REDIS_TLS=true \
+              "$IMAGE"
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      AllocationId: !GetAtt NatEipA.AllocationId
-      SubnetId: !Ref PublicSubnetA
-      Tags: [{Key: Name, Value: ShopCloud-NAT-A}]
+      VpcId: !Ref VpcId
+      Port: 5000
+      Protocol: HTTP
+      TargetType: instance
+      HealthCheckPath: /api/health
+      HealthCheckProtocol: HTTP
+      Matcher:
+        HttpCode: "200"
 
-  NatB:
-    Type: AWS::EC2::NatGateway
-    DependsOn: AttachIGW
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      AllocationId: !GetAtt NatEipB.AllocationId
-      SubnetId: !Ref PublicSubnetB
-      Tags: [{Key: Name, Value: ShopCloud-NAT-B}]
+      Scheme: internet-facing
+      Type: application
 
-  AppRouteA:
-    Type: AWS::EC2::RouteTable
-    Properties: {VpcId: !Ref VPC}
+      SecurityGroups:
+        - !Ref ALBSecurityGroupId
 
-  AppRouteB:
-    Type: AWS::EC2::RouteTable
-    Properties: {VpcId: !Ref VPC}
+      Subnets:
+        - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
 
-  AppDefaultA:
-    Type: AWS::EC2::Route
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
-      RouteTableId: !Ref AppRouteA
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatA
+      LoadBalancerArn: !Ref ALB
+      Port: 80
+      Protocol: HTTP
 
-  AppDefaultB:
-    Type: AWS::EC2::Route
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+  ASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn: Listener
     Properties:
-      RouteTableId: !Ref AppRouteB
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatB
+      MinSize: 2
+      MaxSize: 4
+      DesiredCapacity: 2
 
-  AppAssocA:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties: {SubnetId: !Ref AppSubnetA, RouteTableId: !Ref AppRouteA}
+      VPCZoneIdentifier:
+        - !Ref AppSubnetA
+        - !Ref AppSubnetB
 
-  AppAssocB:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties: {SubnetId: !Ref AppSubnetB, RouteTableId: !Ref AppRouteB}
+      TargetGroupARNs:
+        - !Ref TargetGroup
 
-  DataRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties: {VpcId: !Ref VPC}
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 180
 
-  DataAssocA:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties: {SubnetId: !Ref DataSubnetA, RouteTableId: !Ref DataRouteTable}
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
 
-  DataAssocB:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties: {SubnetId: !Ref DataSubnetB, RouteTableId: !Ref DataRouteTable}
+  CPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: ShopCloud backend high CPU
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref ASG
+
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 70
+      ComparisonOperator: GreaterThanThreshold
 
 Outputs:
-  VpcId: {Value: !Ref VPC}
-  PublicSubnets: {Value: !Join [",", [!Ref PublicSubnetA, !Ref PublicSubnetB]]}
-  AppSubnets: {Value: !Join [",", [!Ref AppSubnetA, !Ref AppSubnetB]]}
-  DataSubnets: {Value: !Join [",", [!Ref DataSubnetA, !Ref DataSubnetB]]}
-  AppSecurityGroupBase: {Value: "Create application security groups in the compute stack."}
+  LoadBalancerDNS:
+    Value: !GetAtt ALB.DNSName
+
+  AppSecurityGroupId:
+    Value: !Ref AppSecurityGroupId
+
+  ALBSecurityGroupId:
+    Value: !Ref ALBSecurityGroupId
