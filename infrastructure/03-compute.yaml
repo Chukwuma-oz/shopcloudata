@@ -99,15 +99,15 @@ Resources:
           Fn::Base64: !Sub |
             #!/bin/bash
             set -eux
-            dnf install -y docker awscli
+            yum install -y docker awscli jq
             systemctl enable --now docker
             REGION="${AWS::Region}"
             IMAGE="${EcrImageUri}"
             ACCOUNT_REGISTRY="$(echo "$IMAGE" | cut -d/ -f1)"
             aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ACCOUNT_REGISTRY"
             SECRET_JSON="$(aws secretsmanager get-secret-value --secret-id "${DatabaseSecretArn}" --region "$REGION" --query SecretString --output text)"
-            DB_USER="$(echo "$SECRET_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["username"])')"
-            DB_PASS="$(echo "$SECRET_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["password"])')"
+            DB_USER="$(echo "$SECRET_JSON" | jq -r '.username')"
+            DB_PASS="$(echo "$SECRET_JSON" | jq -r '.password')"
             docker pull "$IMAGE"
             docker rm -f shopcloud-backend || true
             docker run -d --name shopcloud-backend --restart unless-stopped \
