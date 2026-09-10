@@ -11,7 +11,7 @@ The project demonstrates a production-style cloud architecture using containeriz
 ## 🚀 Live Demo
 
 **Live Application:**  
-https://YOUR-CLOUDFRONT-DOMAIN
+https://d1agq1lu49v0iq.cloudfront.net/
 
 The frontend is delivered through Amazon CloudFront, while API requests are routed to the backend through an Application Load Balancer.
 
