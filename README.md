@@ -97,3 +97,74 @@ ShopCloud provides an online shopping application with:
 
 
 https://d1agq1lu49v0iq.cloudfront.net/
+
+---
+
+## 📸 Project Screenshots
+
+### 🛒 Live Application
+
+![ShopCloud Home](docs/screenshots/shopcloud-home.png)
+
+The deployed ShopCloud e-commerce application running through Amazon CloudFront.
+
+### ☁️ AWS Architecture
+
+![ShopCloud AWS Architecture](docs/screenshots/ShopCloud%20AWS%20Architecture%20Overview.png)
+
+High-availability AWS architecture showing CloudFront, S3, Application Load Balancer, EC2 Auto Scaling, Amazon RDS, ElastiCache Redis, and AWS Secrets Manager.
+
+### 🏗️ CloudFormation Infrastructure
+
+![CloudFormation Stacks](docs/screenshots/cloudformation-stacks.png)
+
+AWS CloudFormation stacks used to provision the ShopCloud infrastructure.
+
+### ⚖️ Auto Scaling
+
+![Auto Scaling](docs/screenshots/autoscaling.png)
+
+EC2 Auto Scaling Group running application instances across multiple Availability Zones.
+
+### 🗄️ Amazon RDS MySQL
+
+![RDS MySQL](docs/screenshots/rds-mysql.png)
+
+Amazon RDS MySQL database used as the application's persistent data layer.
+
+### 🔄 GitHub Actions CI
+
+![GitHub Actions](docs/screenshots/github-actions.png)
+
+GitHub Actions workflow validating the backend and frontend builds.
+
+### 🛍️ E-Commerce Architecture
+
+![E-Commerce Architecture](docs/screenshots/ShopCloud%20AWS%20E-Commerce%20Architecture.png)
+
+Application architecture showing the major AWS services and application components.
+
+---
+
+## 📌 About the Project
+
+ShopCloud was built as a hands-on AWS cloud engineering project to demonstrate the deployment of a full-stack application using highly available, scalable, and managed AWS services.
+
+The project focuses on:
+
+- Cloud infrastructure design
+- Infrastructure as Code with AWS CloudFormation
+- High availability across multiple Availability Zones
+- Containerized backend deployment with Docker
+- EC2 Auto Scaling
+- Application Load Balancing
+- Managed MySQL database with Amazon RDS
+- Redis caching with Amazon ElastiCache
+- Secure database credentials using AWS Secrets Manager
+- Static frontend hosting with Amazon S3
+- Global content delivery with Amazon CloudFront
+- Container images with Amazon ECR
+- Continuous Integration with GitHub Actions
+- AWS networking and security groups
+
+This project demonstrates practical cloud engineering concepts that can be applied to production-style web applications.
