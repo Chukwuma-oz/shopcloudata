@@ -107,7 +107,7 @@ The deployed ShopCloud e-commerce application running through Amazon CloudFront.
 
 ### ☁️ AWS Architecture
 
-![AWS Architecture](docs/screenshots/aws-architecture.png)
+![AWS Architecture](docs/screenshots/ShopCloud%20AWS%20Architecture%20Overview.png)
 
 High-availability AWS architecture showing CloudFront, S3, Application Load Balancer, EC2 Auto Scaling, Amazon RDS, ElastiCache Redis, and Secrets Manager.
 
