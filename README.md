@@ -138,6 +138,6 @@ GitHub Actions workflow validating the backend and frontend builds.
 
 ### 🛍️ E-Commerce Architecture
 
-![E-Commerce Architecture](docs/screenshots/ecommerce-architecture.png)
+![E-Commerce Architecture](docs/screenshots/ShopCloud%20AWS%20E-Commerce%20Architecture.png)
 
 Application architecture showing the major AWS services and application components.
